@@ -15,7 +15,12 @@ One tool lives in this folder and it runs:
 ```bash
 python3 caption.py caption.txt
 python3 caption.py caption.txt --keywords "client proposals,agency pricing"
+python3 caption.py caption.txt --lang pt     # for a Portuguese (pt-BR) caption
 ```
+
+If the user writes in Portuguese, always pass `--lang pt`: it reads accented
+hashtags in full, counts `R$` amounts as concrete, and recognises Portuguese
+calls to action ("comente PALAVRA", "link na bio", "me chama no direct").
 
 It prints the caption the way the feed prints it: the first 125 characters in a
 box, everything else behind the tap. Read that box before you read anything

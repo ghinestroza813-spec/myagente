@@ -22,6 +22,11 @@ python3 hookscore.py --hook "one line"      # score a single one
 python3 beats.py script.txt --target 30     # timed beat sheet before you shoot
 ```
 
+**Portuguese.** If the user writes in Portuguese (pt-BR), add `--lang pt` to both
+tools. The English word lists cannot read accents, `R$`, or Portuguese tension
+words, so they mis-score Portuguese hooks. The Portuguese profile has not been
+calibrated on real hooks: report its scores as direction, not as a verdict.
+
 ## Before you write
 
 1. Read `~/.claude/instagram/voice.md` if it exists. That is the user's voice

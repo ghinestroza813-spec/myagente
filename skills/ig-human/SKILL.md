@@ -20,6 +20,12 @@ python3 detect.py draft.txt                    # score it, five checks
 python3 detect.py before.txt after.txt         # prove the delta
 ```
 
+**Portuguese.** If the draft is in Portuguese (pt-BR), add `--lang pt` to both
+tools. That switches to `slop.pt.json` and to accent-aware patterns. The
+Portuguese lexicon and the detect thresholds have not been calibrated on real
+Portuguese text, so treat the score as direction. Check each replacement still
+agrees in gender and number before you keep it.
+
 Both read `slop.json`: 154 stock words and phrases with plain-English
 replacements, 18 invisible character classes, 11 typographic substitutions and
 16 structural tells. The last block of each list is Instagram-specific, the

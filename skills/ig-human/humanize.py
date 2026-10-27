@@ -24,6 +24,7 @@ Usage
   pbpaste | python3 humanize.py - --report
   python3 humanize.py draft.txt --json
   python3 humanize.py draft.txt -o clean.txt
+  python3 humanize.py draft.txt --lang pt     # Portuguese (pt-BR) lexicon
 """
 
 import argparse
@@ -35,6 +36,7 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEX = os.path.join(HERE, "slop.json")
+LEXICONS = {"en": LEX, "pt": os.path.join(HERE, "slop.pt.json")}
 
 URL_RE = re.compile(r"https?://\S+|www\.\S+|\S+@\S+\.\S+")
 SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
@@ -159,7 +161,9 @@ def pass_lexical(text, lex):
     text = re.sub(r"\n{3,}", "\n\n", text)
     # An em dash that became a comma, followed by a sentence connective, leaves
     # a splice ("is important, also, it's proof"). Promote it to a full stop.
-    text = re.sub(r",\s*(also|so|still|basically|in the end)\s*,\s*",
+    connectives = lex.get("splice_connectives",
+                          ["also", "so", "still", "basically", "in the end"])
+    text = re.sub(r",\s*(" + "|".join(re.escape(c) for c in connectives) + r")\s*,\s*",
                   lambda m: ". " + m.group(1)[0].upper() + m.group(1)[1:] + ", ", text)
     return text, hits
 
@@ -196,10 +200,10 @@ def restore_capitals(original, text):
     a deliberately lower-case voice is a style, not an artefact, and shouting
     over it would be exactly the kind of thing this script exists to stop.
     """
-    starts = re.findall(r"(?:^|[.!?]\s+|\n)\s*([A-Za-z])", original)
+    starts = re.findall(r"(?:^|[.!?]\s+|\n)\s*([A-Za-zÀ-ÖØ-öø-ÿ])", original)
     if not starts or sum(1 for c in starts if c.isupper()) * 2 < len(starts):
         return text
-    return re.sub(r"(?:^|(?<=[.!?] )|(?<=[.!?]\n)|(?<=\n))\s*([a-z])",
+    return re.sub(r"(?:^|(?<=[.!?] )|(?<=[.!?]\n)|(?<=\n))\s*([a-zß-öø-ÿ])",
                   lambda m: m.group(0)[:-1] + m.group(1).upper(), text)
 
 
@@ -259,11 +263,14 @@ def main():
     ap.add_argument("-o", "--out", help="write cleaned text here instead of stdout")
     ap.add_argument("--report", action="store_true", help="print what changed, to stderr")
     ap.add_argument("--json", action="store_true", help="emit {text, report} as JSON")
-    ap.add_argument("--lexicon", default=LEX, help="path to slop.json")
+    ap.add_argument("--lang", choices=sorted(LEXICONS), default="en",
+                    help="which lexicon to clean against: en (slop.json) or pt (slop.pt.json)")
+    ap.add_argument("--lexicon", default=None,
+                    help="path to a lexicon file (overrides --lang)")
     args = ap.parse_args()
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
-    lex = load_lexicon(args.lexicon)
+    lex = load_lexicon(args.lexicon or LEXICONS[args.lang])
     clean, report = humanize(raw, lex)
 
     if args.json:

@@ -19,6 +19,7 @@ Usage
   python3 caption.py caption.txt --keywords "proposal software,client contract"
   pbpaste | python3 caption.py -
   python3 caption.py caption.txt --json
+  python3 caption.py caption.txt --lang pt    # Portuguese (pt-BR) caption
 """
 
 import argparse
@@ -56,6 +57,49 @@ ASKS = [
 FILLER_TAGS = {"#viral", "#fyp", "#explore", "#explorepage", "#foryou", "#foryoupage",
                "#trending", "#instagood", "#love", "#follow", "#like4like", "#reels",
                "#reelsinstagram", "#viralreels", "#instadaily"}
+
+
+# Language profiles. Everything above is English; --lang pt swaps in
+# accent-aware patterns, R$ amounts, .com.br links and Portuguese calls to action.
+_PROFILE_KEYS = ["HASHTAG_RE", "LINK_RE", "CONCRETE_RE", "ASKS", "FILLER_TAGS"]
+
+_PT = {
+    "HASHTAG_RE": re.compile(r"(?:^|\s)(#\w+)"),
+    "LINK_RE": re.compile(
+        r"https?://\S+|\bwww\.\S+|"
+        r"\b[a-z0-9-]+\.(?:com\.br|com|co|io|net|org|ai|app|br|ee|me)/\S*",
+        re.IGNORECASE),
+    "CONCRETE_RE": re.compile(
+        r"R?\$\s?\d|\b\d[\d.,]*\b|(?<!^)\b[A-ZÀ-ÖØ-Þ][a-zß-öø-ÿ]{2,}\b", re.MULTILINE),
+    "ASKS": [
+        # Scoped flags: the keyword itself has to be written in capitals.
+        (re.compile(r"\bcomente (?:(?i:a palavra) )?\"?(?-i:[A-ZÀ-ÖØ-Þ0-9]{2,})\b", re.IGNORECASE),
+         "comment a keyword"),
+        (re.compile(r"(?i)\b(?:me chama (?:no )?(?:dm|direct)|chama (?:no )?(?:dm|direct)"
+                    r"|(?:me )?manda (?:uma )?(?:dm|direct|mensagem)"
+                    r"|me envia (?:uma )?(?:dm|mensagem))\b"), "DM me"),
+        (re.compile(r"(?i)\bsalv[ea] (?:esse|este|isso)\b"), "save this"),
+        (re.compile(r"(?i)\bcompartilh[ea] (?:esse|este|isso)\b"
+                    r"|\bmanda (?:esse|este) (?:post|reel|v[ií]deo) pra\b"), "share this"),
+        (re.compile(r"(?i)\b(?:me segue|me siga|segue (?:a gente|o perfil|pra)"
+                    r"|siga (?:o perfil|para))\b"), "follow"),
+        (re.compile(r"(?i)\blink (?:na|da|no) bio\b"), "link in bio"),
+        (re.compile(r"(?i)\b(?:arraste|deslize|passe) (?:para|pra) (?:o )?(?:lado|a direita|a esquerda)\b"
+                    r"|\btoque (?:para|pra)\b"), "swipe or tap"),
+        (re.compile(r"(?i)\bme conta\b|\bme diz\b|\bconta pra mim\b"
+                    r"|\bqual (?:voc[êe]|dessas|desses)\b|\bo que voc[êe]\b"), "answer a question"),
+    ],
+    "FILLER_TAGS": FILLER_TAGS | {
+        "#segueme", "#seguir", "#seguirdevolta", "#curtir", "#curtidas",
+        "#explorar", "#viralizar", "#fy", "#instabrasil", "#instagrambrasil",
+    },
+}
+PROFILES = {"en": {k: globals()[k] for k in _PROFILE_KEYS}, "pt": _PT}
+
+
+def set_lang(lang):
+    """Swap the module-level patterns and word lists to the chosen profile."""
+    globals().update(PROFILES[lang])
 
 
 def visible_window(text, cut):
@@ -199,7 +243,10 @@ def main():
                     help=f"characters shown before '... more' (default {TRUNCATE})")
     ap.add_argument("--keywords", default="", help="comma-separated terms you want to be found for")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--lang", choices=sorted(PROFILES), default="en",
+                    help="patterns and call-to-action phrases to use (en or pt, default en)")
     args = ap.parse_args()
+    set_lang(args.lang)
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
     a = analyse(raw, cut=args.truncate, keywords=args.keywords.split(","))

@@ -28,6 +28,7 @@ Usage
   python3 hookscore.py --hook "I lost $18,000 on one missing contract."
   pbpaste | python3 hookscore.py -
   python3 hookscore.py hooks.txt --json
+  python3 hookscore.py hooks.txt --lang pt    # Portuguese (pt-BR) hooks
 """
 
 import argparse
@@ -109,13 +110,120 @@ DEALBREAKERS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Language profiles.  Everything defined above is the English profile.  The
+# Portuguese (pt-BR) profile below swaps in accent-aware regexes, Brazilian
+# money (R$ 18.000), and Portuguese word lists.  Pick one with --lang.
+# ---------------------------------------------------------------------------
+THOUSANDS_RE = re.compile(r"(?<=\d),(?=\d)")
+MONEY_RE = re.compile(r"\$\s?\d")
+YOU_RE = re.compile(r"\b(you|your|you're|youre|yourself)\b")
+ME_RE = re.compile(r"\b(i|my|me|we|our)\b")
+WEAK_WHOLE_WORD = False    # English keeps its original prefix match
+JOIN_RE = re.compile(r"(?!)()")  # English: matches nothing, text is left alone
+
+_PROFILE_KEYS = [
+    "WORD_RE", "NUMBER_RE", "PROPER_RE", "THOUSANDS_RE", "MONEY_RE",
+    "SPOKEN_NUMBERS", "MONEY_WORDS", "STAKES", "WEAK_OPENERS", "IMPERATIVES",
+    "DEALBREAKERS", "YOU_RE", "ME_RE", "WEAK_WHOLE_WORD", "JOIN_RE",
+]
+
+_UP = "A-ZÀ-ÖØ-Þ"
+_LOW = "a-zß-öø-ÿ"
+_HASHTAG_PT = re.compile(r"(?:^|\s)#\w+")
+
+_PT = {
+    "WORD_RE": re.compile(r"[\w$%'’-]+"),
+    "NUMBER_RE": re.compile(
+        r"R?\$\s?\d[\d.,]*"                                  # R$ 18.000 / $50
+        r"|\b\d[\d.,]*\s?"                                   # a figure, with or
+        r"(?:%|k\b|x\b|h\b|horas?\b|min\b|minutos?\b"        # without a unit
+        r"|dias?\b|semanas?\b|m[eê]s(?:es)?\b|anos?\b)?",
+        re.IGNORECASE),
+    "PROPER_RE": re.compile(rf"(?<!^)\b[{_UP}][{_LOW}]{{2,}}\b"),
+    "THOUSANDS_RE": re.compile(r"(?<=\d)[.,](?=\d{3}\b)"),   # 18.000 -> 18000
+    "MONEY_RE": re.compile(r"R?\$\s?\d"),
+    # "um" and "primeiro" are left out on purpose, same reason as "one"/"first".
+    "SPOKEN_NUMBERS": {
+        "zero", "dois", "duas", "três", "tres", "quatro", "cinco", "seis",
+        "sete", "oito", "nove", "dez", "onze", "doze", "quinze", "vinte",
+        "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta",
+        "noventa", "cem", "cento", "mil", "milhão", "milhões", "bilhão",
+        "bilhões", "dúzia", "metade", "dobro", "triplo",
+    },
+    "MONEY_WORDS": {
+        "reais", "real", "grana", "centavos", "dólares", "dólar", "dolar",
+        "dolares", "milionário", "milionária", "bilionário", "bilionária",
+        "faturamento", "faturei", "lucro", "salário", "aluguel", "receita",
+        "porcento",
+    },
+    "STAKES": {
+        "pare", "nunca", "errado", "errada", "erro", "erros", "perdi",
+        "perder", "perdendo", "perde", "perdeu", "custa", "custou", "quebrei",
+        "quebrado", "falhei", "falha", "falhar", "fracasso", "ninguém",
+        "ninguem", "nenhum", "nenhuma", "não", "nao", "desistir", "desisti",
+        "demitido", "demitida", "deletei", "deletar", "apaguei", "matou",
+        "mata", "substituiu", "substitui", "cortei", "venci", "grátis",
+        "gratis", "pago", "paguei", "cobrado", "cobrou", "contratado",
+        "economizei", "proibido", "ilegal", "pior", "odeio", "odiava",
+        "desperdiçei", "desperdício", "golpe", "mentira", "mentiu", "verdade",
+        "segredo", "escondido", "roubou", "antes", "até", "mas", "exceto",
+        "problema", "risco", "perigo", "aviso", "arrependo", "arrependimento",
+        "deveria", "devia", "ainda", "já", "só", "apenas", "sem", "versus",
+        "vs", "culpa", "armadilha", "cilada",
+    },
+    "WEAK_OPENERS": [
+        "então", "bom", "beleza", "oi", "olá", "ola", "e aí", "galera",
+        "pessoal", "gente", "bem-vindo", "bem-vinda", "bem vindo", "hoje",
+        "basicamente", "sinceramente", "olha", "escuta", "tipo", "deixa",
+        "vamos", "eu queria", "eu quero", "um dos", "uma das", "você já",
+        "você sabia", "você quer", "nesse vídeo", "neste vídeo", "no vídeo",
+        "a coisa", "muita gente", "tem", "existe", "isso é", "como um",
+        "como uma", "quando", "sabe", "né",
+    ],
+    "IMPERATIVES": {
+        "pare", "roube", "copie", "delete", "apague", "tente", "assista",
+        "leia", "salve", "use", "construa", "faça", "escreva", "envie",
+        "pegue", "comece", "desista", "nunca", "sempre", "não", "coloque",
+        "rode", "confira", "olhe", "evite", "pare",
+    },
+    "DEALBREAKERS": [
+        (re.compile(r"(?i)^\s*(?:pare de rolar|para de rolar|n[aã]o role)"),
+         "Opens with \"pare de rolar\". Asking for attention proves you have not earned it."),
+        (re.compile(r"(?i)\b(?:(?:neste|nesse) (?:v[ií]deo|reel)|no (?:v[ií]deo|reel) de hoje"
+                    r"|hoje (?:eu )?vou (?:te )?(?:mostrar|ensinar)|vou te (?:mostrar|ensinar))\b"),
+         "Video preamble. Delete it and open on the payoff."),
+        (re.compile(r"(?i)^\s*(?:oi\b|ol[aá]\b|e a[ií]\b|fala,? (?:galera|pessoal|gente)"
+                    r"|bem[- ]vind|bom dia\b|boa tarde\b|boa noite\b)"),
+         "Greeting. Nobody came to the feed to be greeted."),
+        (_HASHTAG_PT,
+         "Hashtag in the hook. Hashtags belong at the bottom of the caption, if anywhere."),
+        (EMOJI_RE,
+         "Emoji in the hook. On-screen text at hook size has room for words or for an emoji, not both."),
+    ],
+    "YOU_RE": re.compile(
+        r"\b(você|vocês|voce|voces|vc|vcs|seu|sua|seus|suas|teu|tua|te|contigo|tu)\b"),
+    "ME_RE": re.compile(
+        r"\b(eu|meu|minha|meus|minhas|mim|me|nós|nosso|nossa|a gente)\b"),
+    "WEAK_WHOLE_WORD": True,
+    "JOIN_RE": re.compile(r"(R?\$)\s+(?=\d)"),     # "R$ 18.000" is one word
+}
+
+PROFILES = {"en": {k: globals()[k] for k in _PROFILE_KEYS}, "pt": _PT}
+
+
+def set_lang(lang):
+    """Swap the module-level patterns and word lists to the chosen profile."""
+    globals().update(PROFILES[lang])
+
+
 def clamp(n):
     return max(0.0, min(100.0, n))
 
 
 def words(text):
     # "$18,000" is one word when it is spoken, so it is one word here too.
-    return WORD_RE.findall(re.sub(r"(?<=\d),(?=\d)", "", text))
+    return WORD_RE.findall(JOIN_RE.sub(r"\1", THOUSANDS_RE.sub("", text)))
 
 
 def check_length(text):
@@ -153,7 +261,7 @@ def check_stakes(text):
     w = [x.lower().strip("'’") for x in words(text)]
     hits = [x for x in w if x in STAKES]
     markers = sorted(set(hits))
-    if re.search(r"\$\s?\d", text):
+    if MONEY_RE.search(text):
         markers.append("a price")
     n = len(markers)
     score = {0: 20.0, 1: 70.0}.get(n, 100.0)
@@ -172,7 +280,12 @@ def check_frontload(text):
     penalty = 0
     hit_opener = None
     for weak in WEAK_OPENERS:
-        if opener.startswith(weak) or low[0] == weak:
+        if WEAK_WHOLE_WORD:
+            # Whole words only, so "só" does not catch "sócio".
+            hit = (opener + " ").startswith(weak + " ")
+        else:
+            hit = opener.startswith(weak) or low[0] == weak
+        if hit:
             penalty, hit_opener = 30, weak
             break
     payload = None
@@ -201,11 +314,11 @@ def check_address(text):
     """Aimed at one viewer, or floating in the air."""
     low = text.lower()
     w = [x.lower().strip("'’") for x in words(text)]
-    if re.search(r"\b(you|your|you're|youre|yourself)\b", low):
+    if YOU_RE.search(low):
         return 100.0, "speaks to the viewer"
     if w and w[0] in IMPERATIVES:
         return 90.0, f"imperative opener (\"{w[0]}\")"
-    if re.search(r"\b(i|my|me|we|our)\b", low):
+    if ME_RE.search(low):
         return 70.0, "first person, no viewer named"
     return 35.0, "third person, nobody in the room"
 
@@ -273,7 +386,10 @@ def main():
     ap.add_argument("input", nargs="?", default="-", help="file with one hook per line, or -")
     ap.add_argument("--hook", help="score a single hook given on the command line")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--lang", choices=sorted(PROFILES), default="en",
+                    help="word lists and patterns to score against (en or pt, default en)")
     args = ap.parse_args()
+    set_lang(args.lang)
 
     if args.hook:
         lines = [args.hook]

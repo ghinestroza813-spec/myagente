@@ -267,6 +267,27 @@ would rather know. The measurement script is not in the repo because it depends
 on `yt-dlp`, but the method is four lines and is written out in
 [`/ig-viral`](skills/ig-viral/SKILL.md).
 
+## Portuguese (pt-BR)
+
+`hookscore.py`, `beats.py`, `caption.py`, `humanize.py` and `detect.py` take
+`--lang pt`. English stays the default and its output is unchanged.
+
+```bash
+python3 hookscore.py hooks.txt --lang pt
+python3 beats.py script.txt --target 30 --lang pt
+python3 caption.py caption.txt --lang pt
+python3 humanize.py draft.txt --lang pt --report
+python3 detect.py draft.txt --lang pt
+```
+
+What changes: the patterns read accented letters and `R$ 18.000`, the tension,
+opener and call-to-action word lists are Portuguese, hashtags with accents are
+read whole, and `humanize.py` and `detect.py` use
+[`slop.pt.json`](skills/ig-human/slop.pt.json). What does not: the labels the
+scripts print are still English, `swipe.py` still classifies hooks against the
+English formulas in `hooks.json`, and the Portuguese lists and thresholds are
+not calibrated on real Portuguese text, so read the scores as direction.
+
 ## The fine print, which is the honest part
 
 **These skills do not post to Instagram.** There is a real Content Publishing

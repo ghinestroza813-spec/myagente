@@ -19,6 +19,7 @@ Usage
   python3 beats.py script.txt --wpm 185 --target 45
   pbpaste | python3 beats.py -
   python3 beats.py script.txt --json
+  python3 beats.py script.txt --lang pt       # Portuguese (pt-BR) script
 """
 
 import argparse
@@ -41,15 +42,48 @@ HOOK_WINDOW = 3.0        # seconds. Past this, the thumb has already decided.
 MAX_BEAT = 4.0           # seconds on one idea with no change on screen.
 ABSTRACT_RUN = 3         # beats in a row with nothing checkable in them.
 
+# Language profiles. Everything above is English; --lang pt swaps in
+# accent-aware patterns, Brazilian money (R$ 18.000) and Portuguese stopwords.
+THOUSANDS_RE = re.compile(r"(?<=\d),(?=\d)")
+THOUSANDS_SEP = ","
+JOIN_RE = re.compile(r"(?!)()")    # English: matches nothing, text is left alone
+_PROFILE_KEYS = ["WORD_RE", "CONCRETE_RE", "STOPWORDS", "THOUSANDS_RE", "THOUSANDS_SEP",
+                 "JOIN_RE"]
+
+_PT = {
+    "WORD_RE": re.compile(r"[\w$%'’-]+"),
+    "CONCRETE_RE": re.compile(
+        r"R?\$\s?\d|\b\d[\d.,]*\b|(?<!^)\b[A-ZÀ-ÖØ-Þ][a-zß-öø-ÿ]{2,}\b", re.MULTILINE),
+    "STOPWORDS": {
+        "o", "a", "os", "as", "um", "uma", "uns", "umas", "e", "ou", "mas", "se",
+        "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas", "ao",
+        "aos", "à", "às", "para", "pra", "pro", "por", "com", "que", "isso",
+        "isto", "esse", "essa", "este", "esta", "é", "são", "era", "foi", "ser",
+        "estar", "você", "vocês", "seu", "sua", "eu", "meu", "minha", "me", "te",
+        "nós", "ele", "ela", "eles", "elas", "só", "não", "já", "tem", "tinha",
+        "tive", "vai", "vou", "como", "mais", "muito", "então", "aí", "lá",
+        "aqui", "tudo", "todo", "toda", "num", "numa",
+    },
+    "THOUSANDS_RE": re.compile(r"(?<=\d)[.,](?=\d{3}\b)"),   # 18.000 -> 18000
+    "THOUSANDS_SEP": ".",
+    "JOIN_RE": re.compile(r"(R?\$)\s+(?=\d)"),     # "R$ 18.000" is one word
+}
+PROFILES = {"en": {k: globals()[k] for k in _PROFILE_KEYS}, "pt": _PT}
+
+
+def set_lang(lang):
+    """Swap the module-level patterns and word lists to the chosen profile."""
+    globals().update(PROFILES[lang])
+
 
 def words(text):
     # "$18,000" is one word when it is spoken, so it is one word here too.
-    return WORD_RE.findall(re.sub(r"(?<=\d),(?=\d)", "", text))
+    return WORD_RE.findall(JOIN_RE.sub(r"\1", THOUSANDS_RE.sub("", text)))
 
 
 def pretty(token):
     """Put the thousands separator back for display."""
-    return re.sub(r"(\d)(?=(\d{3})+$)", r"\1,", token)
+    return re.sub(r"(\d)(?=(\d{3})+$)", r"\1" + THOUSANDS_SEP, token)
 
 
 def tc(seconds):
@@ -197,7 +231,10 @@ def main():
     ap.add_argument("--wpm", type=float, default=165, help="speaking rate (default 165)")
     ap.add_argument("--target", type=float, help="target length in seconds")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--lang", choices=sorted(PROFILES), default="en",
+                    help="word lists and patterns to use (en or pt, default en)")
     args = ap.parse_args()
+    set_lang(args.lang)
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
     a = analyse(raw, wpm=args.wpm, target=args.target)

@@ -19,6 +19,7 @@ Usage
   pbpaste | python3 detect.py -
   python3 detect.py draft.txt --json
   python3 detect.py before.txt after.txt      # compare two drafts
+  python3 detect.py draft.txt --lang pt       # Portuguese (pt-BR) draft
 """
 
 import argparse
@@ -38,6 +39,31 @@ CONTRACTIONS = re.compile(r"\b\w+'(?:s|t|re|ve|ll|d|m)\b", re.IGNORECASE)
 PRONOUNS = re.compile(r"\b(i|me|my|mine|we|us|our|you|your)\b", re.IGNORECASE)
 NUMBERS = re.compile(r"\b\d[\d,.]*%?\b|\$\d")
 PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
+
+# Language profiles. Everything above is English; --lang pt swaps in
+# accent-aware patterns, R$ amounts, and Portuguese person and register markers.
+# "CONTRACTIONS" is the spoken-register check: Portuguese has no apostrophe
+# contractions, so it counts the clipped forms people actually type (pra, tá, né).
+LEXICONS = {"en": LEX, "pt": os.path.join(HERE, "slop.pt.json")}
+_PROFILE_KEYS = ["WORD_RE", "CONTRACTIONS", "PRONOUNS", "NUMBERS", "PROPER"]
+
+_PT = {
+    "WORD_RE": re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*"),
+    "CONTRACTIONS": re.compile(
+        r"\b(?:pra|pro|pras|pros|tá|tô|tamo|né|cê|vc|vcs|num|numa|bora|beleza|aí|cara|mano)\b",
+        re.IGNORECASE),
+    "PRONOUNS": re.compile(
+        r"\b(?:eu|me|mim|meu|minha|meus|minhas|nós|nosso|nossa|a gente|você|vocês|voce"
+        r"|seu|sua|seus|suas|te|ti|vc|vcs)\b", re.IGNORECASE),
+    "NUMBERS": re.compile(r"\b\d[\d.,]*%?\b|R?\$\s?\d"),
+    "PROPER": re.compile(r"(?<![.!?]\s)(?<!^)\b[A-ZÀ-ÖØ-Þ][a-zß-öø-ÿ]{2,}\b", re.MULTILINE),
+}
+PROFILES = {"en": {k: globals()[k] for k in _PROFILE_KEYS}, "pt": _PT}
+
+
+def set_lang(lang):
+    """Swap the module-level patterns to the chosen profile."""
+    globals().update(PROFILES[lang])
 
 
 def clamp(n):
@@ -195,10 +221,14 @@ def main():
     ap.add_argument("input", nargs="?", default="-", help="file, or - for stdin")
     ap.add_argument("compare", nargs="?", help="second file, to show before/after")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--lexicon", default=LEX)
+    ap.add_argument("--lang", choices=sorted(LEXICONS), default="en",
+                    help="patterns and lexicon to score against (en or pt, default en)")
+    ap.add_argument("--lexicon", default=None,
+                    help="path to a lexicon file (overrides --lang)")
     args = ap.parse_args()
+    set_lang(args.lang)
 
-    lex = json.load(open(args.lexicon, encoding="utf-8"))
+    lex = json.load(open(args.lexicon or LEXICONS[args.lang], encoding="utf-8"))
     read = lambda p: sys.stdin.read() if p == "-" else open(p, encoding="utf-8").read()
 
     targets = [(args.input, read(args.input))]
